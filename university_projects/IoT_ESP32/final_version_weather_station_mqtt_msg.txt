@@ -1,0 +1,141 @@
+#include <WiFi.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH1106.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include "DHTesp.h"
+#include "ThingSpeak.h"
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+#define OLED_SDA 21
+#define OLED_SCL 22
+#define NUMFLAKES 10
+#define XPOS 0
+#define YPOS 1
+#define DELTAY 2
+Adafruit_SH1106 display(21, 22);
+const int LED_PIN = 13;
+#define DHTPIN 2
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
+const char* WIFI_NAME = "Galaxy S10+1c68";
+const char* WIFI_PASSWORD = "fmc12588";
+const int myChannelNumber = 2546027;
+const char* myApiKey = "IDDKZH9N6CBAFBIP";
+const char* server = "api.thingspeak.com";
+const int myLEDChannelNumber = 2562999;
+
+char led = 1;
+int led1=1;
+
+WiFiClient client;
+WiFiServer serverw(80);
+DHTesp dhtSensor;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+  delay(10);
+  dhtSensor.setup(DHTPIN, DHTesp::DHT22);
+  dht.begin();
+  Wire.begin(21, 22); // Initialize I2C with custom SDA and SCL pins
+  WiFi.begin(WIFI_NAME, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("Wifi not connected");
+  }
+  Serial.println("Wifi connected !");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+  WiFi.mode(WIFI_STA);
+  ThingSpeak.begin(client);
+  display.begin(SH1106_SWITCHCAPVCC, 0x3C);
+  display.display();
+  delay(500);
+  display.clearDisplay();
+  display.drawPixel(10, 10, WHITE);
+  display.display();
+  delay(500);
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  display.print(F("Wifi ....."));
+  display.setTextSize(2);
+  display.print(F("Cloud ...."));
+  display.display();
+  delay(500);
+  display.clearDisplay();
+  serverw.begin();
+}
+
+int value = 0;
+int led2=0;
+void loop() {
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+  if (isnan(h) || isnan(t)) {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  }
+
+  float led_1 =ThingSpeak.readFloatField(myLEDChannelNumber, led1);
+    if (led_1 == 4 ) { 
+     digitalWrite(LED_PIN , HIGH);
+     Serial.println("LED on");
+  }
+  else { digitalWrite(LED_PIN , LOW);
+         Serial.println("LED off"); 
+       }
+
+  WiFiClient client = serverw.available();   // listen for incoming clients
+  if (client) {                             // if you get a client,
+    String req = client.readStringUntil('\r');
+    client.flush();
+    if (req.indexOf("/led/on") != -1) {
+      led = 4;
+    }
+    else if (req.indexOf("/led/off") != -1) {
+      led = 1;
+    }
+  }
+  if (led == 1) { 
+    digitalWrite(LED_PIN , LOW);
+    Serial.println("LED off");
+    }
+    else { 
+        digitalWrite(LED_PIN , HIGH);
+        Serial.println("LED on");   
+        }
+
+  ThingSpeak.setField(1,t);
+  ThingSpeak.setField(2,h);
+  int x = ThingSpeak.writeFields(myChannelNumber,myApiKey);
+  Serial.println("Temp: " + String(t, 2) + "°C");
+  Serial.println("Humidity: " + String(h, 1) + "%");
+  if(x == 200){ Serial.println("Data pushed successfull");
+              }else{ Serial.println("Push error" + String(x));
+                   }
+
+  Serial.println("---");
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 0);
+  //display.setTextWrap(false);
+  display.setCursor(0, 0);
+  display.print(F("Temp:     "));
+  display.print(t);
+  display.println(F(" *C"));
+  display.print(F("Umiditate:"));
+  display.print(h);
+  display.println(F(" %"));
+  display.display();
+
+delay(3500);
+}
